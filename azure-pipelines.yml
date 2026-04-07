@@ -1,0 +1,69 @@
+trigger:
+- Polaris-testing
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+- group: NIRMAL_SCA   # Contains POLARIS_TOKEN securely
+
+# Static values (same as Jenkinsfile)
+- name: POLARIS_SERVER_URL
+  value: https://poc.polaris.blackduck.com
+- name: POLARIS_APP_NAME
+  value: Nirmal_SCM
+- name: POLARIS_PROJECT
+  value: WebGoat
+- name: POLARIS_BRANCH
+  value: Polaris-testing
+- name: COVERITY_BUILD_COMMAND
+  value: >
+    mvn clean compile
+    -DskipTests
+    -DskipITs
+    -Dmaven.test.skip=true
+    -Dgpg.skip=true
+
+steps:
+
+# ✅ Checkout source
+- checkout: self
+  clean: true
+
+# ✅ Install Java 17
+- task: JavaToolInstaller@0
+  displayName: Install Java 17
+  inputs:
+    versionSpec: '17'
+    jdkArchitectureOption: x64
+    jdkSourceOption: PreInstalled
+
+# ✅ Install Maven 3.9.11
+- task: Maven@4
+  displayName: Validate Maven installation
+  inputs:
+    mavenVersionOption: SpecificVersion
+    mavenVersion: 3.9.11
+    goals: '--version'
+
+# ✅ Download Polaris Bridge CLI
+- bash: |
+    curl -fLsS -o bridge.zip \
+      https://repo.blackduck.com/bds-integrations-release/com/blackduck/integration/bridge/binaries/bridge-cli-bundle/latest/bridge-cli-bundle-linux64.zip
+    unzip -qo bridge.zip
+    chmod +x bridge-cli-bundle-linux64/bridge-cli
+  displayName: Download Polaris Bridge CLI
+
+# ✅ Run Polaris Scan (SAST + SCA)
+- bash: |
+    ./bridge-cli-bundle-linux64/bridge-cli --stage polaris \
+      polaris.serverUrl=$(POLARIS_SERVER_URL) \
+      polaris.accessToken=$(POLARIS_ACCESS_TOKEN) \
+      polaris.application.name=NIRMAL_SCM \
+      polaris.project.name=WebGoat \
+      polaris.branch.name=Polaris-testing \
+      polaris.assessment.types=SAST,SCA \
+      polaris.waitForScan=true \
+      polaris.reports.sarif.create=true \
+      coverity.build.command="$(COVERITY_BUILD_COMMAND)"
+  displayName: Run Polaris Scan
